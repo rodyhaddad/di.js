@@ -1,5 +1,5 @@
 import {Injector} from '../src/injector';
-import {Inject, Provide, SuperConstructor, InjectLazy, TransientScope, ScopeAnnotation} from '../src/annotations';
+import {Inject, Provide, SuperConstructor, InjectLazy, TransientScope, Scope} from '../src/annotations';
 
 import {Car, CyclicEngine} from './fixtures/car';
 import {module as houseModule} from './fixtures/house';
@@ -446,7 +446,7 @@ describe('injector', function() {
 
 
     it('should force new instances by annotation', function() {
-      class RouteScope extends ScopeAnnotation {}
+      class RouteScope extends Scope {}
 
       class Engine {
         start() {}
@@ -474,7 +474,7 @@ describe('injector', function() {
 
 
     it('should force new instances by annotation using overriden provider', function() {
-      class RouteScope extends ScopeAnnotation {}
+      class RouteScope extends Scope {}
 
       class Engine {
         start() {}
@@ -500,7 +500,7 @@ describe('injector', function() {
 
 
     it('should force new instance by annotation using the lowest overriden provider', function() {
-      class RouteScope extends ScopeAnnotation {}
+      class RouteScope extends Scope {}
 
       @RouteScope
       class Engine {
@@ -568,7 +568,7 @@ describe('injector', function() {
 
 
     it('should force new instance by annotation for default provider', function() {
-      class RequestScope extends ScopeAnnotation {}
+      class RequestScope extends Scope {}
 
       @Inject
       @RequestScope
@@ -651,7 +651,7 @@ describe('injector', function() {
     });
 
 
-    describe('with locals', function() {5
+    describe('with locals', function() {
       it('should always create a new instance', function() {
         var constructorSpy = jasmine.createSpy('constructor');
 
@@ -687,68 +687,109 @@ describe('injector', function() {
 
   describe('Scopes', function () {
 
-    it('should only accepts scopes that inherit ScopeAnnotation', function () {
+    it('should only accepts scopes that inherit Scope', function () {
       class BadRouteScope{}
-      class RouteScope extends ScopeAnnotation {}
+      class RouteScope extends Scope {}
 
       expect(() => new Injector([], [BadRouteScope]))
-        .toThrowError("Cannot create injector, 'BadRouteScope' is not a ScopeAnnotation");
+        .toThrowError("Cannot create injector, 'BadRouteScope' is not a Scope");
 
       expect(() => new Injector([], [RouteScope])).not.toThrow();
     });
 
     it('should only instantiate a scoped service if the injector can handle that scope', function () {
-      class RouteScope extends ScopeAnnotation {}
+      class RouteScope extends Scope {}
 
       @RouteScope
       function Service(){}
 
-      var injector = new Injector(),
-          child = injector.createChild([], [RouteScope]);
+      var injector = new Injector();
+      var child = injector.createChild([], [RouteScope]);
 
       expect(() => { child.get(Service); }).not.toThrow();
       expect(() => { injector.get(Service); })
-        .toThrowError("Can't instantiate service 'Service', RouteScope not handled by this injector");
-
-      expect(injector._cache.has(Service)).toBe(false);
-      expect(child._cache.has(Service)).toBe(true);
+        .toThrowError("Can't instantiate service 'Service', no injector for RouteScope!");
     });
 
     it('should delegate the instantiation to the parent if it doesn\'t handle the scope', function () {
-      class RouteScope extends ScopeAnnotation {}
+      class RouteScope extends Scope {}
 
       @RouteScope
       function Service(){}
 
-      var injector = new Injector(),
-        child = injector.createChild([], [RouteScope]),
-        grantChild = child.createChild();
-
-      expect(() => { grantChild.get(Service); }).not.toThrow();
+      var injector = new Injector();
+      var child = injector.createChild([], [RouteScope]);
+      var grantChild = child.createChild();
 
       expect(grantChild.get(Service)).toBe(child.get(Service));
+      expect(() => { injector.get(Service); })
+        .toThrowError("Can't instantiate service 'Service', no injector for RouteScope!");
+    });
 
-      expect(injector._cache.has(Service)).toBe(false);
-      expect(child._cache.has(Service)).toBe(true);
-      expect(grantChild._cache.has(Service)).toBe(false);
+    iit('should delegate the instantiation to the parent if it doesn\'t handle the scope', function () {
+      class RouteScope extends Scope {}
+
+      @RouteScope
+      function Service(){}
+
+      @Inject(Service)
+      function Controller(){}
+
+      var injector = new Injector();
+      var child = injector.createChild([], [RouteScope]);
+      var grantChild = child.createChild();
+
+      var instance = child.get(Controller);
+      expect(grantChild.get(Controller)).toBe(instance);
+      expect(() => { injector.get(Controller); })
+        .toThrowError("Can't instantiate service 'Service', no injector for RouteScope! (Controller -> Service)");
     });
 
     describe('No Scopes', function () {
       it('should be instantiated by the root injector if a service doesn\'t have a scope', function () {
         function Service(){}
 
-        var injector = new Injector(),
-            child = injector.createChild(),
-          grantChild = child.createChild();
+        var injector = new Injector();
+        var child = injector.createChild();
+        var grantChild = child.createChild();
 
+        // all .gets are equal, as it's in the injector cache
         expect(grantChild.get(Service)).toBe(child.get(Service));
         expect(child.get(Service)).toBe(injector.get(Service));
         expect(grantChild.get(Service)).toBe(injector.get(Service));
-
-        expect(injector._cache.has(Service)).toBe(true);
-        expect(child._cache.has(Service)).toBe(false);
-        expect(grantChild._cache.has(Service)).toBe(false);
       });
+    });
+
+    class RouteScope extends Scope {}
+    function Compiler() {
+
+    }
+
+    @Inject(Compiler)
+    function Foo(compiler) {
+      this.compiler = compiler;
+    }
+
+    @RouteScope
+    @Inject(Foo, Compiler)
+    function RequestHandler(foo, compiler) {
+      this.foo = foo;
+      this.compiler = compiler;
+    }
+
+    @Provide(Compiler)
+    function RouteCompiler() {
+
+    }
+
+    it('should do stuff', function () {
+      var injector = new Injector();
+      var child = injector.createChild([RouteCompiler], [RouteScope]);
+      var reqHandler = child.get(RequestHandler);
+
+      expect(reqHandler.compiler).not.toBe(reqHandler.foo.compiler);
+      expect(reqHandler.compiler).toBeInstanceOf(RouteCompiler);
+      expect(reqHandler.foo.compiler).toBeInstanceOf(Compiler);
     });
   });
 });

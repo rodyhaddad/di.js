@@ -15,11 +15,11 @@ class SuperConstructor {}
 
 // All scopes must
 // extend this
-class ScopeAnnotation {}
+class Scope {}
 
 // A built-in scope.
 // Never cache.
-class TransientScope extends ScopeAnnotation {}
+class TransientScope extends Scope {}
 
 class Inject {
   constructor(...tokens) {
@@ -119,7 +119,7 @@ function readAnnotations(fn) {
         collectedAnnotations.provide.isPromise = annotation.isPromise;
       }
 
-      if (annotation instanceof ScopeAnnotation) {
+      if (annotation instanceof Scope) {
         collectedAnnotations.scopes.push(annotation);
       }
     }
@@ -157,7 +157,7 @@ export {
   readAnnotations,
 
   SuperConstructor,
-  ScopeAnnotation,
+  Scope,
   TransientScope,
   Inject,
   InjectPromise,

@@ -4,7 +4,7 @@ import {
   hasAnnotation,
   Provide as ProvideAnnotation,
   TransientScope as TransientScopeAnnotation,
-  ScopeAnnotation
+  Scope as ScopeAnnotation
 } from './annotations';
 import {isFunction, toString} from './util';
 import {profileInjector} from './profiler';
@@ -43,7 +43,7 @@ class Injector {
   constructor(modules = [], scopes = [], parentInjector = null, providers = new Map()) {
     for (var Scope of scopes) {
       if (!(Scope.prototype instanceof ScopeAnnotation)) {
-        throw new Error(`Cannot create injector, '${toString(Scope)}' is not a ScopeAnnotation`);
+        throw new Error(`Cannot create injector, '${toString(Scope)}' is not a Scope`);
       }
     }
 
@@ -236,7 +236,8 @@ class Injector {
         if (this._parent) {
           return this._parent.get(token, resolving, wantPromise, wantLazy);
         } else {
-          throw new Error(`Can't instantiate service '${toString(token)}', ${toString(cantHandle.constructor)} not handled by this injector`);
+          resolvingMsg = constructResolvingMessage(resolving, token);
+          throw new Error(`Can't instantiate service '${toString(token)}', no injector for ${toString(cantHandle.constructor)}!${resolvingMsg}`);
         }
       }
       provider = createProviderFromFnOrClass(token, annotations);
@@ -273,7 +274,6 @@ class Injector {
       if (delayingInstantiation) {
         return this.get(param.token, resolving, true, param.isLazy);
       }
-
       return this.get(param.token, resolving, param.isPromise, param.isLazy);
     });
 
